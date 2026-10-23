@@ -229,6 +229,22 @@ describe('alur review', () => {
     assert.ok(list.body.items.some((i) => i.id === inspectionId));
   });
 
+  test('daftar menyertakan counts per status yang mengikuti pencarian', async () => {
+    const all = await api(srv.base, 'GET', '/api/inspections', { headers: tmaHeader(REVIEWER) });
+    assert.equal(all.status, 200);
+    const c = all.body.counts;
+    assert.ok(c, 'counts ada');
+    for (const k of ['pending', 'approved', 'rejected', 'all']) assert.equal(typeof c[k], 'number');
+    assert.equal(c.all, c.pending + c.approved + c.rejected);
+    assert.equal(c.all, all.body.items.length);
+    assert.ok(c.approved >= 1);
+    const pend = await api(srv.base, 'GET', '/api/inspections?status=pending', { headers: tmaHeader(REVIEWER) });
+    assert.equal(pend.body.items.length, c.pending);
+    assert.deepEqual(pend.body.counts, c, 'counts tidak dipengaruhi filter status');
+    const none = await api(srv.base, 'GET', '/api/inspections?q=tidak-ada-zzz', { headers: tmaHeader(REVIEWER) });
+    assert.deepEqual(none.body.counts, { pending: 0, approved: 0, rejected: 0, all: 0 });
+  });
+
   test('keputusan tidak dikenal ditolak', async () => {
     const r = await api(srv.base, 'POST', `/api/inspections/${inspectionId}/review`, { headers: tmaHeader(REVIEWER), json: { decision: 'maybe' } });
     assert.equal(r.status, 400);

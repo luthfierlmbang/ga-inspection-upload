@@ -175,7 +175,8 @@ export function createApp({ config, storage, notifier, log = console }) {
       updatedAt: i.updated_at,
       reviewedByName: i.reviewed_by_name,
     }));
-    res.json({ items });
+    const counts = storage.countInspections({ search: search || null });
+    res.json({ items, counts });
   });
 
   api.get('/inspections/:id', requireRole('reviewer'), (req, res) => {

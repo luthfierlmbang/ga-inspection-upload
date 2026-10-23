@@ -194,6 +194,26 @@ export function createStorage({ dbPath, uploadDir }) {
       return db.prepare(sql).all(...args, Math.min(Number(limit) || 100, 500));
     },
 
+    // Counts per status for the same search, so filter tabs can show totals.
+    countInspections({ search } = {}) {
+      const where = [];
+      const args = [];
+      if (search) {
+        where.push("(LOWER(booking_id) LIKE ? ESCAPE '\\' OR LOWER(REPLACE(COALESCE(plate,''),' ','')) LIKE ? ESCAPE '\\')");
+        const esc = search.toLowerCase().replace(/[\\%_]/g, (m) => '\\' + m);
+        args.push(`%${esc}%`, `%${esc.replace(/\s+/g, '')}%`);
+      }
+      const rows = db
+        .prepare(`SELECT status, COUNT(*) AS n FROM inspections ${where.length ? 'WHERE ' + where.join(' AND ') : ''} GROUP BY status`)
+        .all(...args);
+      const counts = { pending: 0, approved: 0, rejected: 0, all: 0 };
+      for (const r of rows) {
+        if (r.status in counts) counts[r.status] = r.n;
+        counts.all += r.n;
+      }
+      return counts;
+    },
+
     getInspection(id) {
       const insp = q.inspById.get(id);
       if (!insp) return null;
