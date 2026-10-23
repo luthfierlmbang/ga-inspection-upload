@@ -124,16 +124,18 @@ export function createApp({ config, storage, notifier, log = console }) {
     const files = req.files || [];
     if (files.length === 0) throw new HttpError(400, 'Tidak ada file foto');
     const captions = [].concat(req.body?.captions ?? req.body?.caption ?? []);
+    const positions = [].concat(req.body?.positions ?? []);
     const checked = files.map((f, i) => {
       const type = detectImageType(f.buffer);
       if (!type) throw new HttpError(415, `File ke-${i + 1} bukan gambar JPEG, PNG, atau WebP`);
       if (type.unsupported) throw new HttpError(415, `File ke-${i + 1} berformat HEIC. Kirim ulang sebagai JPEG.`);
-      return { f, type, caption: clean(captions[i], 300) };
+      const pos = Number.parseInt(positions[i], 10);
+      return { f, type, caption: clean(captions[i], 300), position: Number.isInteger(pos) && pos >= 0 && pos < 1000 ? pos : i };
     });
     const saved = [];
-    for (const { f, type, caption } of checked) {
+    for (const { f, type, caption, position } of checked) {
       try {
-        const p = await storage.addPhoto({ submission: req.submission, buffer: f.buffer, mime: type.mime, ext: type.ext, caption, maxPerStage: config.maxPhotosPerStage });
+        const p = await storage.addPhoto({ submission: req.submission, buffer: f.buffer, mime: type.mime, ext: type.ext, caption, position, maxPerStage: config.maxPhotosPerStage });
         saved.push({ id: p.id, size: p.size, caption: p.caption });
       } catch (e) {
         if (e.code === 'STAGE_FULL') throw new HttpError(413, `Batas ${config.maxPhotosPerStage} foto per tahap sudah tercapai`, { saved });

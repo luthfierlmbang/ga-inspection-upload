@@ -1,0 +1,20 @@
+# Contoh. Belum pernah dijalankan di VPS build ini.
+# Taruh di belakang reverse proxy HTTPS (Caddy/Nginx/Traefik) milik server tujuan.
+services:
+  ga-inspection:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8787
+      DB_PATH: /data/inspections.db
+      UPLOAD_DIR: /data/uploads
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ga-inspection-data:/data
+
+volumes:
+  ga-inspection-data:

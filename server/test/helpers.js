@@ -22,7 +22,7 @@ export async function startTestServer(envOverrides = {}) {
     BOT_TOKEN,
     GA_UPLOADER_IDS: `${UPLOADER},${ADMIN}`,
     GA_REVIEWER_IDS: `${REVIEWER},${ADMIN}`,
-    DATA_DIR: path.join(dir, 'data'),
+    DB_PATH: path.join(dir, 'data', 'test.db'),
     UPLOAD_DIR: path.join(dir, 'uploads'),
     ...envOverrides,
   });

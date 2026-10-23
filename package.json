@@ -1,0 +1,14 @@
+{
+  "name": "ga-inspection-upload",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Telegram Mini App untuk upload dan review foto inspection kendaraan GA Bot",
+  "scripts": {
+    "install:all": "npm --prefix server ci && npm --prefix web ci",
+    "build": "npm --prefix web run build",
+    "start": "node --env-file-if-exists=.env server/src/index.js",
+    "dev:server": "node --env-file-if-exists=.env --watch server/src/index.js",
+    "dev:web": "npm --prefix web run dev",
+    "test": "npm --prefix server test"
+  }
+}

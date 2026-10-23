@@ -187,6 +187,23 @@ describe('alur review', () => {
     assert.equal(bad.status, 403);
   });
 
+  test('urutan foto mengikuti pilihan uploader, bukan urutan selesai upload', async () => {
+    const s = await newSubmission('veh-order-01', { photoCount: 3 });
+    const send = (pos, cap) => {
+      const form = new FormData();
+      form.append('captions', cap);
+      form.append('positions', String(pos));
+      form.append('photos', new Blob([fakeJpeg()]), 'x.jpg');
+      return api(srv.base, 'POST', `/api/submissions/${s.body.submissionId}/photos`, { headers: tmaHeader(UPLOADER), form });
+    };
+    await send(2, 'ketiga');
+    await send(0, 'pertama');
+    await send(1, 'kedua');
+    const done = await api(srv.base, 'POST', `/api/submissions/${s.body.submissionId}/complete`, { headers: tmaHeader(UPLOADER) });
+    const detail = await api(srv.base, 'GET', `/api/inspections/${done.body.inspectionId}`, { headers: tmaHeader(REVIEWER) });
+    assert.deepEqual(detail.body.photos.map((p) => p.caption), ['pertama', 'kedua', 'ketiga']);
+  });
+
   test('tolak tanpa alasan ditolak 400', async () => {
     const r = await api(srv.base, 'POST', `/api/inspections/${inspectionId}/review`, { headers: tmaHeader(REVIEWER), json: { decision: 'reject', reason: '   ' } });
     assert.equal(r.status, 400);

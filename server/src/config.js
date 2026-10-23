@@ -54,7 +54,7 @@ export function loadConfig(env = process.env) {
     initDataMaxAgeSec: 24 * 60 * 60,
     maxPhotosPerStage: 20,
     maxFileBytes: 10 * 1024 * 1024,
-    dataDir: path.resolve(env.DATA_DIR || path.join(PROJECT_ROOT, 'data')),
+    dbPath: path.resolve(env.DB_PATH || path.join(PROJECT_ROOT, 'data', 'inspections.db')),
     uploadDir: path.resolve(env.UPLOAD_DIR || path.join(PROJECT_ROOT, 'uploads')),
     webDist: path.join(PROJECT_ROOT, 'web', 'dist'),
   };

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS photos (
   mime TEXT NOT NULL,
   size INTEGER NOT NULL,
   caption TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_photos_insp_stage ON photos(inspection_id, stage);
@@ -50,12 +51,14 @@ CREATE INDEX IF NOT EXISTS idx_sub_insp ON submissions(inspection_id);
 const newId = (prefix) => `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
 const nowIso = () => new Date().toISOString();
 
-export function createStorage({ dataDir, uploadDir }) {
-  fs.mkdirSync(dataDir, { recursive: true });
+export function createStorage({ dbPath, uploadDir }) {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   fs.mkdirSync(uploadDir, { recursive: true });
-  const db = new DatabaseSync(path.join(dataDir, 'inspections.db'));
+  const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  const photoCols = db.prepare('PRAGMA table_info(photos)').all().map((c) => c.name);
+  if (!photoCols.includes('position')) db.exec('ALTER TABLE photos ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
   const uploadRoot = path.resolve(uploadDir);
 
   function safeFilePath(rel) {
@@ -79,12 +82,15 @@ export function createStorage({ dataDir, uploadDir }) {
     subById: db.prepare('SELECT * FROM submissions WHERE id = ?'),
     countStage: db.prepare('SELECT COUNT(*) AS n FROM photos WHERE inspection_id = ? AND stage = ?'),
     insertPhoto: db.prepare(
-      'INSERT INTO photos (id, submission_id, inspection_id, stage, file_path, mime, size, caption, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO photos (id, submission_id, inspection_id, stage, file_path, mime, size, caption, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ),
     deletePhoto: db.prepare('DELETE FROM photos WHERE id = ?'),
     photoById: db.prepare('SELECT * FROM photos WHERE id = ?'),
-    photosBySub: db.prepare('SELECT * FROM photos WHERE submission_id = ? ORDER BY created_at, rowid'),
-    photosByInsp: db.prepare('SELECT * FROM photos WHERE inspection_id = ? ORDER BY created_at, rowid'),
+    photosBySub: db.prepare('SELECT * FROM photos WHERE submission_id = ? ORDER BY position, rowid'),
+    // Photos keep the order the uploader picked them in, even though they upload in parallel.
+    photosByInsp: db.prepare(
+      'SELECT p.* FROM photos p JOIN submissions s ON s.id = p.submission_id WHERE p.inspection_id = ? ORDER BY s.created_at, p.position, p.rowid',
+    ),
     subsByInsp: db.prepare('SELECT * FROM submissions WHERE inspection_id = ? ORDER BY created_at'),
     completeSub: db.prepare('UPDATE submissions SET completed_at = ? WHERE id = ?'),
     resetInspPending: db.prepare(
@@ -130,7 +136,7 @@ export function createStorage({ dataDir, uploadDir }) {
 
     // Reserves a slot synchronously (so concurrent requests cannot exceed the cap),
     // then writes the file. The DB row is removed again if the write fails.
-    async addPhoto({ submission, buffer, mime, ext, caption, maxPerStage }) {
+    async addPhoto({ submission, buffer, mime, ext, caption, position = 0, maxPerStage }) {
       const count = q.countStage.get(submission.inspection_id, submission.stage).n;
       if (count >= maxPerStage) {
         const err = new Error('stage_full');
@@ -140,7 +146,7 @@ export function createStorage({ dataDir, uploadDir }) {
       const id = newId('ph');
       const rel = path.join(submission.inspection_id, submission.stage, `${crypto.randomUUID()}.${ext}`);
       const abs = safeFilePath(rel);
-      q.insertPhoto.run(id, submission.id, submission.inspection_id, submission.stage, rel, mime, buffer.length, caption || null, nowIso());
+      q.insertPhoto.run(id, submission.id, submission.inspection_id, submission.stage, rel, mime, buffer.length, caption || null, position, nowIso());
       try {
         await fsp.mkdir(path.dirname(abs), { recursive: true });
         await fsp.writeFile(abs, buffer, { flag: 'wx' });
