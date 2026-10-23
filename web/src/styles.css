@@ -296,21 +296,6 @@ textarea.input { resize: none; }
 .field-error { display: flex; align-items: center; gap: 4px; color: var(--red); font-weight: 700; font-size: 14px; }
 .field-error svg { flex-shrink: 0; }
 
-.segmented { border: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.segmented legend { padding: 0; margin-bottom: 8px; }
-.seg-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.seg {
-  position: relative; display: flex; align-items: center; justify-content: center; text-align: center;
-  min-height: var(--tap); padding: 6px 4px; border: 1px solid var(--line); margin-left: -1px;
-  font-size: 14px; font-weight: 700; line-height: 1.2; cursor: pointer; background: var(--paper);
-}
-.seg:first-child { margin-left: 0; border-radius: var(--radius) 0 0 var(--radius); }
-.seg:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
-.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.seg:has(input:focus-visible) { outline: 2px solid var(--red); outline-offset: 1px; z-index: 2; }
-.seg.is-on { background: var(--ink); color: #fff; border-color: var(--ink); z-index: 1; }
-.segmented:disabled .seg { cursor: not-allowed; opacity: 0.6; }
-
 /* Sticky action bar. Page padding follows its measured height, so nothing hides under it. */
 .action-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;

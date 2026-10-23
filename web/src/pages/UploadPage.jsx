@@ -614,24 +614,24 @@ export default function UploadPage({ me, search }) {
 
       <section className="step" aria-labelledby="sec-hasil">
         <StepHead num="02" id="sec-hasil" title="Hasil dan catatan" aside="Opsional" />
-        <fieldset className="segmented" disabled={locked}>
-          <legend className="field-label">Hasil inspeksi</legend>
-          <div className="seg-row">
-            {Object.entries(RESULTS).map(([value, label]) => (
-              <label key={value} className={`seg seg-${value}${result === value ? ' is-on' : ''}`}>
-                <input
-                  type="radio"
-                  name="result"
-                  value={value}
-                  checked={result === value}
-                  onChange={() => setResult(value)}
-                  onClick={() => result === value && setResult('')}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
+        <div className="field">
+          <label className="field-label" htmlFor="upload-result">Hasil inspeksi</label>
+          <div className="select-wrap">
+            <select
+              id="upload-result"
+              className={`input select${result ? '' : ' is-empty'}`}
+              value={result}
+              disabled={locked}
+              onChange={(e) => setResult(e.target.value)}
+            >
+              <option value="">Pilih hasil inspeksi</option>
+              {Object.entries(RESULTS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <Icon name="down" size={18} className="select-chev" />
           </div>
-        </fieldset>
+        </div>
         <label className="field">
           <span className="field-label">Catatan umum</span>
           <textarea className="input" rows={3} maxLength={2000} placeholder="Contoh: baret halus pintu kiri belakang, BBM 3/4" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={locked} />
