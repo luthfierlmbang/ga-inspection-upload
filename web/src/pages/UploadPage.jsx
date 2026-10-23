@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { apiGet, apiPost, uploadPhoto } from '../lib/api.js';
 import { compressImage } from '../lib/compress.js';
 import { STAGES, RESULTS, formatBytes } from '../lib/format.js';
 import { closeMiniApp, haptic } from '../lib/telegram.js';
-import { AppHeader, SectionLabel, Notice, Loading, ProgressBar } from '../components/Layout.jsx';
+import { AppHeader, StepHead, Notice, Loading, ProgressBar, StateScreen } from '../components/Layout.jsx';
 import { Link } from '../router.jsx';
 import Icon from '../components/Icon.jsx';
 
@@ -23,20 +23,143 @@ function readParams(search) {
 }
 
 const STATUS_TEXT = {
-  compressing: 'Mengompres',
+  compressing: 'Menyiapkan',
   ready: 'Siap kirim',
+  queued: 'Menunggu giliran',
   uploading: 'Mengirim',
   done: 'Terkirim',
-  failed: 'Gagal',
-  invalid: 'Ditolak',
+  failed: 'Gagal terkirim',
+  invalid: 'Tidak bisa dipakai',
 };
+
+// Keeps the page bottom padding equal to the real height of the fixed action bar.
+function useBarHeight(ref) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const set = () => document.documentElement.style.setProperty('--bar-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--bar-h');
+    };
+  });
+}
+
+function ThumbBadge({ status, progress }) {
+  if (status === 'done') {
+    return (
+      <span className="tb tb-done" title="Terkirim">
+        <Icon name="check" size={14} strokeWidth={3} />
+      </span>
+    );
+  }
+  if (status === 'failed' || status === 'invalid') {
+    return (
+      <span className="tb tb-failed" title="Gagal">
+        <Icon name="alert" size={14} strokeWidth={3} />
+      </span>
+    );
+  }
+  if (status === 'uploading' || status === 'compressing') {
+    const p = status === 'compressing' ? 0.25 : Math.max(0.06, progress);
+    const c = 2 * Math.PI * 8;
+    return (
+      <span className={`tb tb-ring${status === 'compressing' ? ' is-spin' : ''}`} title={STATUS_TEXT[status]}>
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="8" fill="none" stroke="#e6e6e6" strokeWidth="3" />
+          <circle cx="10" cy="10" r="8" fill="none" stroke="#111" strokeWidth="3" strokeDasharray={`${c * p} ${c}`} transform="rotate(-90 10 10)" />
+        </svg>
+      </span>
+    );
+  }
+  return null;
+}
+
+function PhotoSheet({ item, index, total, editable, onCaption, onRemove, onClose, onStep }) {
+  const [caption, setCaption] = useState(item.caption);
+  const inputRef = useRef(null);
+  useEffect(() => setCaption(item.caption), [item.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+  const save = () => {
+    onCaption(caption.trim());
+    onClose();
+  };
+  const status = item.status;
+  return (
+    <div className="sheet-wrap" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <button type="button" className="sheet-backdrop" aria-label="Tutup" onClick={save} />
+      <div className="sheet">
+        <div className="sheet-head">
+          <p id="sheet-title" className="sheet-title">
+            Foto {index + 1} <span className="muted">dari {total}</span>
+          </p>
+          <div className="sheet-nav">
+            <button type="button" className="icon-btn" onClick={() => { onCaption(caption.trim()); onStep(-1); }} disabled={index === 0} aria-label="Foto sebelumnya">
+              <Icon name="left" />
+            </button>
+            <button type="button" className="icon-btn" onClick={() => { onCaption(caption.trim()); onStep(1); }} disabled={index === total - 1} aria-label="Foto berikutnya">
+              <Icon name="right" />
+            </button>
+            <button type="button" className="icon-btn" onClick={save} aria-label="Tutup">
+              <Icon name="close" />
+            </button>
+          </div>
+        </div>
+        <div className="sheet-preview">
+          {item.previewUrl ? <img src={item.previewUrl} alt={`Foto ${index + 1}`} /> : <span className="muted">{STATUS_TEXT[status]}</span>}
+        </div>
+        <p className={`sheet-status st-${status}`}>
+          {STATUS_TEXT[status]}
+          {item.size ? <span className="muted"> · {formatBytes(item.size)}</span> : null}
+        </p>
+        {item.error && <p className="sheet-error">{item.error}</p>}
+        <label className="field">
+          <span className="field-label">Keterangan foto</span>
+          <textarea
+            ref={inputRef}
+            className="input"
+            rows={2}
+            maxLength={300}
+            placeholder="Contoh: baret pintu kiri belakang"
+            value={caption}
+            disabled={!editable}
+            onChange={(e) => setCaption(e.target.value)}
+          />
+        </label>
+        <div className="sheet-actions">
+          {editable || status === 'invalid' ? (
+            <button type="button" className="btn btn-outline btn-danger" onClick={() => { onRemove(); onClose(); }}>
+              Hapus foto
+            </button>
+          ) : (
+            <span />
+          )}
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editable ? 'Simpan' : 'Tutup'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function UploadPage({ me, search }) {
   const params = useMemo(() => readParams(search), [search]);
   const paramError = !BOOKING_RE.test(params.booking)
-    ? 'ID booking tidak ada atau tidak valid di link.'
+    ? 'ID booking di link tidak ada atau tidak valid.'
     : !STAGES[params.stage]
-      ? 'Tahap inspection tidak dikenal di link.'
+      ? 'Tahap inspeksi di link tidak dikenal.'
       : null;
   const canUpload = me.roles.includes('uploader');
 
@@ -48,13 +171,16 @@ export default function UploadPage({ me, search }) {
   const [phase, setPhase] = useState('edit'); // edit | uploading | partial | done
   const [formError, setFormError] = useState('');
   const [summary, setSummary] = useState(null);
+  const [sheetKey, setSheetKey] = useState(null);
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
+  const barRef = useRef(null);
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  useBarHeight(barRef);
 
   useEffect(() => {
-    if (paramError || !canUpload) return;
+    if (paramError || !canUpload) return undefined;
     let alive = true;
     setInfo({ loading: true });
     apiGet(`/api/bookings/${encodeURIComponent(params.booking)}/stages/${params.stage}`)
@@ -70,6 +196,7 @@ export default function UploadPage({ me, search }) {
   const patch = (key, p) => setItems((list) => list.map((i) => (i.key === key ? { ...i, ...p } : i)));
 
   const remainingServer = info.remaining ?? MAX_PHOTOS;
+  const active = items.filter((i) => i.status !== 'invalid');
   const pendingCount = items.filter((i) => i.status !== 'invalid' && i.status !== 'done').length;
   const doneCount = items.filter((i) => i.status === 'done').length;
   const slotsLeft = remainingServer - pendingCount - (submissionId ? 0 : doneCount);
@@ -130,13 +257,15 @@ export default function UploadPage({ me, search }) {
     }
     if (!queue.length) {
       setFormError('Tambahkan minimal satu foto.');
-      return;
+      return undefined;
     }
     if (itemsRef.current.some((i) => i.status === 'compressing')) {
-      setFormError('Tunggu sampai semua foto selesai dikompres.');
-      return;
+      setFormError('Tunggu sampai semua foto selesai disiapkan.');
+      return undefined;
     }
+    setSheetKey(null);
     setPhase('uploading');
+    queue.forEach((it) => patch(it.key, { status: 'queued', progress: 0, error: '' }));
     let subId = submissionId;
     try {
       if (!subId) {
@@ -153,10 +282,11 @@ export default function UploadPage({ me, search }) {
         setSubmissionId(subId);
       }
     } catch (e) {
+      queue.forEach((it) => patch(it.key, { status: it.status }));
       setPhase('edit');
       setFormError(e.message);
       haptic('error');
-      return;
+      return undefined;
     }
 
     let next = 0;
@@ -179,9 +309,9 @@ export default function UploadPage({ me, search }) {
     if (failed > 0) {
       setPhase('partial');
       haptic('warning');
-      return;
+      return undefined;
     }
-    await finish(subId);
+    return finish(subId);
   }
 
   async function finish(subId) {
@@ -190,11 +320,19 @@ export default function UploadPage({ me, search }) {
       const done = await apiPost(`/api/submissions/${subId}/complete`);
       setSummary(done);
       setPhase('done');
+      window.scrollTo(0, 0);
       haptic('success');
     } catch (e) {
       setPhase('partial');
       setFormError(e.message);
     }
+  }
+
+  function dropFailed() {
+    setItems((list) => {
+      list.filter((i) => i.status === 'failed').forEach((i) => i.previewUrl && URL.revokeObjectURL(i.previewUrl));
+      return list.filter((i) => i.status !== 'failed');
+    });
   }
 
   function startAnother() {
@@ -206,80 +344,95 @@ export default function UploadPage({ me, search }) {
     setSummary(null);
     setFormError('');
     setPhase('edit');
+    window.scrollTo(0, 0);
   }
 
-  const header = (
-    <AppHeader
-      title="Upload foto inspection"
-      sub={STAGES[params.stage] || 'Tahap tidak dikenal'}
-    />
-  );
+  const stageName = STAGES[params.stage] || 'Tahap tidak dikenal';
 
   if (paramError) {
     return (
-      <main className="page">
-        {header}
-        <Notice kind="error" title="Link upload tidak lengkap">
-          <p>{paramError} Buka ulang dari tombol di GA Bot.</p>
-        </Notice>
-      </main>
+      <StateScreen icon="missing" title="Link upload tidak lengkap">
+        <p>{paramError}</p>
+        <p className="muted">Tutup halaman ini lalu tekan lagi tombol upload pada pesan booking di GA Bot.</p>
+      </StateScreen>
     );
   }
   if (!canUpload) {
     return (
-      <main className="page">
-        {header}
-        <Notice kind="error" title="Akses ditolak">
-          <p>Akun ini terdaftar sebagai reviewer, bukan pengunggah foto.</p>
-        </Notice>
-      </main>
+      <StateScreen icon="lock" title="Akses ditolak">
+        <p>Akun ini terdaftar sebagai reviewer, bukan pengunggah foto.</p>
+        <p className="muted">Minta tim GA menambahkan akun Anda ke daftar pengunggah bila perlu upload.</p>
+      </StateScreen>
     );
   }
 
-  const booking = (
-    <dl className="booking-card">
-      <div>
-        <dt>Booking</dt>
-        <dd className="mono">{params.booking}</dd>
-      </div>
-      <div>
-        <dt>Kendaraan</dt>
-        <dd>
-          {plate ? <strong>{plate}</strong> : <span className="muted">Plat belum ada</span>}
-          {vehicle && <span className="muted"> {vehicle}</span>}
-        </dd>
-      </div>
-    </dl>
+  const bookingStrip = (
+    <section className="booking-strip" aria-label="Data booking">
+      <p className="bs-stage">{stageName}</p>
+      <p className="bs-plate">
+        {plate || <span className="muted">Plat belum ada</span>}
+        {vehicle && <span className="bs-vehicle"> {vehicle}</span>}
+      </p>
+      <p className="bs-id mono">Booking {params.booking}</p>
+    </section>
   );
 
   if (phase === 'done' && summary) {
     return (
-      <main className="page">
-        {header}
-        {booking}
-        <section className="done-panel" aria-live="polite">
-          <span className="done-mark" aria-hidden="true">
-            <Icon name="check" size={28} strokeWidth={2.5} />
-          </span>
-          <h2>{summary.photoCount} foto terkirim</h2>
-          <p className="muted">{STAGES[summary.stage]}. Menunggu review admin GA.</p>
-          <dl className="summary-list">
+      <main className="page page-done">
+        <AppHeader title="Foto terkirim" />
+        <section className="done" aria-live="polite">
+          <div className="done-head">
+            <span className="done-mark" aria-hidden="true">
+              <Icon name="check" size={28} strokeWidth={2.75} />
+            </span>
             <div>
-              <dt>Result</dt>
-              <dd>{summary.result ? RESULTS[summary.result] : 'Tidak diisi'}</dd>
+              <p className="done-count">{summary.photoCount} foto</p>
+              <p className="muted">Menunggu review GA</p>
+            </div>
+          </div>
+          <dl className="kv">
+            <div>
+              <dt>Kendaraan</dt>
+              <dd>
+                <strong>{plate || '-'}</strong>
+                {vehicle && <span className="muted"> {vehicle}</span>}
+              </dd>
             </div>
             <div>
-              <dt>Catatan</dt>
-              <dd>{summary.notes || 'Tidak ada catatan'}</dd>
+              <dt>Booking</dt>
+              <dd className="mono">{summary.bookingId}</dd>
             </div>
+            <div>
+              <dt>Tahap</dt>
+              <dd>{STAGES[summary.stage]}</dd>
+            </div>
+            {summary.result && (
+              <div>
+                <dt>Hasil</dt>
+                <dd>
+                  <span className={`result-tag result-${summary.result}`}>{RESULTS[summary.result]}</span>
+                </dd>
+              </div>
+            )}
+            {summary.notes && (
+              <div>
+                <dt>Catatan</dt>
+                <dd className="kv-text">{summary.notes}</dd>
+              </div>
+            )}
           </dl>
+          <div className="next-step">
+            <p className="next-label">Berikutnya</p>
+            <p>Reviewer GA akan memeriksa foto ini. Hasil review dikirim lewat GA Bot.</p>
+          </div>
         </section>
-        <div className="stack">
-          <button type="button" className="btn btn-primary" onClick={closeMiniApp}>
+        <div className="done-actions">
+          <button type="button" className="btn btn-primary btn-block" onClick={closeMiniApp}>
             Tutup
           </button>
-          <button type="button" className="btn btn-outline" onClick={startAnother}>
-            Tambah foto lagi untuk tahap ini
+          <button type="button" className="btn btn-outline btn-block" onClick={startAnother}>
+            Tambah foto lagi
           </button>
           {me.roles.includes('reviewer') && (
             <Link className="btn btn-text" to={`/review/${summary.inspectionId}`}>
@@ -291,19 +444,49 @@ export default function UploadPage({ me, search }) {
     );
   }
 
-  const totalProgress = (() => {
-    const active = items.filter((i) => i.status !== 'invalid');
-    if (!active.length) return 0;
-    return active.reduce((s, i) => s + (i.status === 'done' ? 1 : i.status === 'uploading' ? i.progress : 0), 0) / active.length;
-  })();
+  const progressValue = active.length
+    ? active.reduce((s, i) => s + (i.status === 'done' ? 1 : i.status === 'uploading' ? i.progress * 0.95 : 0), 0) / active.length
+    : 0;
   const failedCount = items.filter((i) => i.status === 'failed').length;
   const sendable = items.filter((i) => i.status === 'ready' || i.status === 'failed').length;
   const compressing = items.some((i) => i.status === 'compressing');
+  const maxHere = Math.min(MAX_PHOTOS, remainingServer);
+  const sheetIndex = items.findIndex((i) => i.key === sheetKey);
+  const sheetItem = sheetIndex >= 0 ? items[sheetIndex] : null;
+  const canPick = phase !== 'uploading' && slotsLeft > 0;
+
+  const pickers = (
+    <>
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        data-testid="gallery-input"
+        onChange={(e) => {
+          addFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(e) => {
+          addFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+    </>
+  );
 
   return (
     <main className="page page-with-bar">
-      {header}
-      {booking}
+      <AppHeader title="Upload foto inspeksi" />
+      {bookingStrip}
 
       {info.loading && <Loading label="Memeriksa data booking" />}
       {info.error && (
@@ -311,109 +494,103 @@ export default function UploadPage({ me, search }) {
           <p>{info.error}</p>
         </Notice>
       )}
-      {info.status && info.count > 0 && (
-        <p className="meta-line">
-          Sudah ada {info.count} foto di tahap ini. Sisa kuota {info.remaining} foto.
-        </p>
-      )}
 
-      <section aria-labelledby="sec-foto">
-        <SectionLabel aside={`${items.filter((i) => i.status !== 'invalid').length} dipilih, maks ${Math.min(MAX_PHOTOS, remainingServer)}`}>
-          <span id="sec-foto">Foto</span>
-        </SectionLabel>
-
-        <input
-          ref={galleryRef}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
+      <section className="step" aria-labelledby="sec-foto">
+        <StepHead num="01" id="sec-foto" title="Foto" aside={items.length ? `${active.length} / ${maxHere}` : `Maks ${maxHere}`} />
+        {info.count > 0 && (
+          <p className="meta-line">
+            Tahap ini sudah berisi {info.count} foto dari kiriman sebelumnya.
+          </p>
+        )}
+        {pickers}
 
         {items.length === 0 ? (
-          <div className="empty-drop">
-            <p className="empty-title">Belum ada foto</p>
-            <p className="muted">Ambil foto kendaraan dari kamera atau pilih beberapa sekaligus dari galeri. Maksimal {MAX_PHOTOS} foto.</p>
+          <div className="pick-hero">
+            <button type="button" className="pick-big" onClick={() => cameraRef.current?.click()} disabled={!canPick}>
+              <Icon name="camera" size={28} strokeWidth={1.75} />
+              <span className="pick-big-label">Kamera</span>
+              <span className="pick-big-hint">Ambil foto</span>
+            </button>
+            <button type="button" className="pick-big" onClick={() => galleryRef.current?.click()} disabled={!canPick}>
+              <Icon name="image" size={28} strokeWidth={1.75} />
+              <span className="pick-big-label">Galeri</span>
+              <span className="pick-big-hint">Pilih banyak sekaligus</span>
+            </button>
+            <p className="pick-note">
+              Foto dikompres otomatis di HP. Ketuk foto untuk menambah keterangan.
+            </p>
           </div>
         ) : (
-          <ul className="thumb-list">
-            {items.map((it, idx) => (
-              <li key={it.key} className={`thumb thumb-${it.status}`}>
-                <div className="thumb-img">
-                  {it.previewUrl ? <img src={it.previewUrl} alt={`Foto ${idx + 1}`} /> : <span className="thumb-ph">{it.status === 'invalid' ? 'Gagal' : '...'}</span>}
-                  <span className="thumb-num">{idx + 1}</span>
-                  {it.status !== 'done' && it.status !== 'uploading' && (
-                    <button type="button" className="thumb-remove" onClick={() => removeItem(it.key)} aria-label={`Hapus foto ${idx + 1}`} disabled={phase === 'uploading'}>
-                      <Icon name="close" size={16} strokeWidth={2.5} />
+          <>
+            <ul className="tgrid" aria-label="Foto dipilih">
+              {items.map((it, idx) => {
+                const removable = phase !== 'uploading' && it.status !== 'done' && it.status !== 'uploading' && it.status !== 'queued';
+                const st = it.status;
+                return (
+                  <li key={it.key} className={`tcell tcell-${st}`}>
+                    <button
+                      type="button"
+                      className="tcell-open"
+                      onClick={() => setSheetKey(it.key)}
+                      aria-label={`Foto ${idx + 1}, ${STATUS_TEXT[st]}${it.caption ? `, keterangan: ${it.caption}` : ', tanpa keterangan'}. Ketuk untuk detail`}
+                    >
+                      {it.previewUrl ? <img src={it.previewUrl} alt="" /> : <span className="tcell-ph">{st === 'invalid' ? 'Gagal' : ''}</span>}
                     </button>
-                  )}
-                </div>
-                <div className="thumb-body">
-                  <div className="thumb-status">
-                    <span className={`st st-${it.status}`}>{phase === 'uploading' && it.status === 'ready' ? 'Menunggu giliran' : STATUS_TEXT[it.status]}</span>
-                    {it.size ? <span className="muted">{formatBytes(it.size)}</span> : null}
-                  </div>
-                  {(it.status === 'uploading' || it.status === 'done') && <ProgressBar value={it.progress} label={`Progress foto ${idx + 1}`} />}
-                  {it.error && <p className="thumb-error">{it.error}</p>}
-                  <input
-                    type="text"
-                    className="input input-sm"
-                    placeholder="Keterangan (opsional)"
-                    aria-label={`Keterangan foto ${idx + 1}`}
-                    maxLength={300}
-                    value={it.caption}
-                    disabled={it.status === 'done' || it.status === 'uploading' || it.status === 'invalid'}
-                    onChange={(e) => patch(it.key, { caption: e.target.value })}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
+                    <span className="tcell-num" aria-hidden="true">{idx + 1}</span>
+                    {removable && (
+                      <button type="button" className="tcell-remove" onClick={() => removeItem(it.key)} aria-label={`Hapus foto ${idx + 1}`}>
+                        <span className="tcell-remove-vis">
+                          <Icon name="close" size={14} strokeWidth={3} />
+                        </span>
+                      </button>
+                    )}
+                    <span className="tcell-badge" aria-hidden="true">
+                      <ThumbBadge status={st} progress={it.progress} />
+                    </span>
+                    <span className={`tcell-cap${it.caption ? ' has-cap' : ''}`} aria-hidden="true">
+                      {it.caption || (st === 'failed' || st === 'invalid' ? 'Gagal' : '+ Keterangan')}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="pick-row">
+              <button type="button" className="btn btn-outline" onClick={() => cameraRef.current?.click()} disabled={!canPick}>
+                <Icon name="camera" /> Kamera
+              </button>
+              <button type="button" className="btn btn-outline" onClick={() => galleryRef.current?.click()} disabled={!canPick}>
+                <Icon name="image" /> Galeri
+              </button>
+            </div>
+          </>
         )}
-
-        <div className="pick-row">
-          <button type="button" className="btn btn-outline" onClick={() => cameraRef.current?.click()} disabled={phase === 'uploading' || slotsLeft <= 0}>
-            <Icon name="camera" /> {items.length ? 'Ambil foto lagi' : 'Kamera'}
-          </button>
-          <button type="button" className="btn btn-outline" onClick={() => galleryRef.current?.click()} disabled={phase === 'uploading' || slotsLeft <= 0}>
-            <Icon name="image" /> Galeri
-          </button>
-        </div>
       </section>
 
-      <section aria-labelledby="sec-hasil">
-        <SectionLabel>
-          <span id="sec-hasil">Hasil inspection</span>
-        </SectionLabel>
+      <section className="step" aria-labelledby="sec-hasil">
+        <StepHead num="02" id="sec-hasil" title="Hasil dan catatan" aside="Opsional" />
         <fieldset className="segmented" disabled={locked}>
-          <legend className="sr-only">Result</legend>
-          {Object.entries(RESULTS).map(([value, label]) => (
-            <label key={value} className={`seg seg-${value}${result === value ? ' is-on' : ''}`}>
-              <input type="radio" name="result" value={value} checked={result === value} onChange={() => setResult(value)} />
-              <span>{label}</span>
-            </label>
-          ))}
+          <legend className="field-label">Hasil inspeksi</legend>
+          <div className="seg-row">
+            {Object.entries(RESULTS).map(([value, label]) => (
+              <label key={value} className={`seg seg-${value}${result === value ? ' is-on' : ''}`}>
+                <input
+                  type="radio"
+                  name="result"
+                  value={value}
+                  checked={result === value}
+                  onChange={() => setResult(value)}
+                  onClick={() => result === value && setResult('')}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
         </fieldset>
         <label className="field">
           <span className="field-label">Catatan umum</span>
           <textarea className="input" rows={3} maxLength={2000} placeholder="Contoh: baret halus pintu kiri belakang, BBM 3/4" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={locked} />
         </label>
-        {submissionId && phase !== 'uploading' && <p className="meta-line">Catatan dan result sudah terkirim bersama sesi upload ini.</p>}
+        {submissionId && phase !== 'uploading' && <p className="meta-line">Hasil dan catatan sudah tersimpan bersama kiriman ini.</p>}
       </section>
 
       {formError && (
@@ -422,35 +599,61 @@ export default function UploadPage({ me, search }) {
         </Notice>
       )}
 
-      <div className="action-bar">
-        {phase === 'uploading' && (
-          <div className="total-progress" aria-live="polite">
-            <div className="total-row">
-              <span>{doneCount} dari {items.filter((i) => i.status !== 'invalid').length} foto terkirim</span>
-              <span>{Math.round(totalProgress * 100)}%</span>
+      <div className="action-bar" ref={barRef}>
+        <div className="action-inner">
+          {phase === 'uploading' && (
+            <div className="total-progress" aria-live="polite">
+              <p className="total-row">
+                <span>Mengirim foto</span>
+                <span className="total-count">{doneCount} dari {active.length} terkirim</span>
+              </p>
+              <ProgressBar value={progressValue} label="Progress kiriman" />
             </div>
-            <ProgressBar value={totalProgress} label="Progress total" />
-          </div>
-        )}
-        {phase === 'partial' && failedCount > 0 && (
-          <p className="bar-warning">
-            {failedCount} foto gagal terkirim. {doneCount} foto sudah aman di server.
-          </p>
-        )}
-        <button type="button" className="btn btn-primary btn-block" onClick={sendAll} disabled={phase === 'uploading' || compressing || (sendable === 0 && phase !== 'partial')}>
-          {phase === 'uploading'
-            ? 'Mengirim...'
-            : phase === 'partial'
-              ? failedCount > 0
-                ? `Kirim ulang ${failedCount} foto gagal`
-                : 'Selesaikan kiriman'
-              : compressing
-                ? 'Menyiapkan foto...'
-                : sendable > 0
-                  ? `Kirim ${sendable} foto`
-                  : 'Kirim foto'}
-        </button>
+          )}
+          {phase === 'partial' && failedCount > 0 && (
+            <div className="bar-warning" role="alert">
+              <p>
+                <strong>{failedCount} foto gagal terkirim.</strong> {doneCount} foto sudah aman di server.
+              </p>
+            </div>
+          )}
+          {phase === 'partial' && failedCount > 0 ? (
+            <div className="bar-buttons">
+              <button type="button" className="btn btn-primary" onClick={sendAll}>
+                <Icon name="retry" size={18} /> Kirim ulang {failedCount} foto
+              </button>
+              <button type="button" className="btn btn-outline" onClick={dropFailed}>
+                Lanjut tanpa foto gagal
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="btn btn-primary btn-block" onClick={sendAll} disabled={phase === 'uploading' || compressing || (sendable === 0 && phase !== 'partial')}>
+              {phase === 'uploading'
+                ? 'Mengirim...'
+                : phase === 'partial'
+                  ? 'Selesaikan kiriman'
+                  : compressing
+                    ? 'Menyiapkan foto...'
+                    : sendable > 0
+                      ? `Kirim ${sendable} foto`
+                      : 'Pilih foto dulu'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {sheetItem && (
+        <PhotoSheet
+          item={sheetItem}
+          index={sheetIndex}
+          total={items.length}
+          editable={phase !== 'uploading' && (sheetItem.status === 'ready' || sheetItem.status === 'failed' || sheetItem.status === 'compressing')}
+          onCaption={(c) => patch(sheetItem.key, { caption: c })}
+          onRemove={() => removeItem(sheetItem.key)}
+          onClose={() => setSheetKey(null)}
+          onStep={(d) => setSheetKey(items[sheetIndex + d]?.key ?? sheetKey)}
+        />
+      )}
     </main>
   );
 }
