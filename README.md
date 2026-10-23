@@ -21,7 +21,7 @@ server/   Express API (Node 22, ESM). Juga menyajikan web/dist di port yang sama
   src/notify.js        notifikasi Telegram opsional
   test/                node:test
 web/      React 19 + Vite 7 (JavaScript)
-docs/screenshots/      hasil review UI 390x844 (mode dev)
+docs/screenshots/v2/   review UI terbaru per viewport (390x844, 360x740, 320x640); v1/ = versi awal
 Dockerfile, docker-compose.yml   contoh deploy (belum dijalankan)
 ```
 
@@ -86,7 +86,7 @@ Di dev (`DEV_AUTH=1`) boleh `X-Dev-User: <id>` dan opsional `X-Dev-Name`.
 | POST | `/api/submissions` | uploader | mulai sesi upload `{bookingId, stage, plate?, vehicle?, notes?, result?, photoCount}` |
 | POST | `/api/submissions/:id/photos` | uploader (pemilik sesi) | multipart `photos` + `captions` + `positions` |
 | POST | `/api/submissions/:id/complete` | uploader (pemilik sesi) | tutup sesi, status inspection kembali **Menunggu review**, kirim notifikasi |
-| GET | `/api/inspections?status=&q=` | reviewer | daftar, urut terbaru. `status`: `pending` / `approved` / `rejected` |
+| GET | `/api/inspections?status=&q=` | reviewer | daftar, urut terbaru. `status`: `pending` / `approved` / `rejected`. Juga `counts: {pending, approved, rejected, all}` untuk pencarian `q` yang sama (tidak terpengaruh `status`) |
 | GET | `/api/inspections/:id` | reviewer | detail + foto (URL bertanda tangan, berlaku 6 jam) |
 | POST | `/api/inspections/:id/review` | reviewer | `{decision: "approve"|"reject", reason, note}`. Tolak tanpa alasan = 400 |
 | GET | `/api/photos/:id?exp=&sig=` | URL bertanda tangan | file foto (dipakai `<img>`, yang tidak bisa kirim header) |

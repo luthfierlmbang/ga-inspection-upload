@@ -590,7 +590,7 @@ export default function UploadPage({ me, search }) {
           <span className="field-label">Catatan umum</span>
           <textarea className="input" rows={3} maxLength={2000} placeholder="Contoh: baret halus pintu kiri belakang, BBM 3/4" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={locked} />
         </label>
-        {submissionId && phase !== 'uploading' && <p className="meta-line">Hasil dan catatan sudah tersimpan bersama kiriman ini.</p>}
+        {submissionId && phase !== 'uploading' && (notes.trim() || result) && <p className="meta-line">Hasil dan catatan sudah tersimpan bersama kiriman ini.</p>}
       </section>
 
       {formError && (
