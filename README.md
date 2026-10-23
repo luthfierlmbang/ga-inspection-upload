@@ -4,7 +4,7 @@ Telegram Mini App untuk **upload dan review foto inspection kendaraan** di GA Bo
 Dibuka dari tombol `web_app` di GA Bot. Ada dua tampilan:
 
 - **Upload** (`/upload?booking=<id>&stage=<tahap>`): admin GA memilih banyak foto sekaligus (kamera atau galeri), foto dikompres di HP, diberi keterangan, lalu dikirim dengan progress per foto. Foto yang gagal bisa dikirim ulang tanpa mengulang yang sudah berhasil.
-- **Review** (`/review`, `/review/<inspectionId>`): admin GA reviewer melihat daftar inspection (filter status, cari booking/plat), membuka foto per tahap (lightbox geser + zoom), lalu **Setujui** atau **Tolak** (alasan wajib).
+- **Review** (`/review`, `/review/<inspectionId>`): admin GA reviewer melihat daftar inspection (filter status, cari booking/plat), membuka foto per tahap (lightbox geser + zoom), lalu pilih keputusan **Setujui** atau **Tolak** dari dropdown (alasan wajib untuk Tolak) dan tekan **Simpan keputusan**.
 
 Tahap inspection: `ga_pre` (GA Pre Inspection), `user_pre` (User Pre-Use Inspection), `user_return` (User Return Inspection), `ga_final` (GA Final Inspection).
 
@@ -21,7 +21,7 @@ server/   Express API (Node 22, ESM). Juga menyajikan web/dist di port yang sama
   src/notify.js        notifikasi Telegram opsional
   test/                node:test
 web/      React 19 + Vite 7 (JavaScript)
-docs/screenshots/v2/   review UI terbaru per viewport (390x844, 360x740, 320x640); v1/ = versi awal
+docs/screenshots/v3/   review UI terbaru per viewport (390x844, 360x740, 320x640); v2/, v1/ = versi sebelumnya
 Dockerfile, docker-compose.yml   contoh deploy (belum dijalankan)
 ```
 
