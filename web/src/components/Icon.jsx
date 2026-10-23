@@ -5,6 +5,7 @@ const paths = {
   close: 'M6 6l12 12 M18 6L6 18',
   left: 'M15 5l-7 7 7 7',
   right: 'M9 5l7 7-7 7',
+  down: 'M5 9l7 7 7-7',
   zoomIn: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M16 16l4 4 M8 11h6 M11 8v6',
   zoomOut: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M16 16l4 4 M8 11h6',
   retry: 'M4 12a8 8 0 0 1 14-5.3 M18 3v4h-4 M20 12a8 8 0 0 1-14 5.3 M6 21v-4h4',

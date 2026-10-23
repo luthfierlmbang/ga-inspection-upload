@@ -10,23 +10,21 @@ import Icon from '../components/Icon.jsx';
 const BACK = { to: '/review', label: 'Daftar' };
 
 function ReviewForm({ inspection, onDone, onCancel }) {
-  const [decision, setDecision] = useState(null);
+  const [decision, setDecision] = useState('');
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [reasonError, setReasonError] = useState('');
   const [error, setError] = useState('');
   const reasonRef = useRef(null);
-
-  useEffect(() => {
-    if (decision === 'reject') reasonRef.current?.focus();
-  }, [decision]);
+  const reject = decision === 'reject';
 
   async function submit(e) {
     e.preventDefault();
     setError('');
     setReasonError('');
-    if (decision === 'reject' && !reason.trim()) {
+    if (!decision) return;
+    if (reject && !reason.trim()) {
       setReasonError('Isi alasan penolakan.');
       reasonRef.current?.focus();
       haptic('error');
@@ -34,7 +32,7 @@ function ReviewForm({ inspection, onDone, onCancel }) {
     }
     setBusy(true);
     try {
-      const r = await apiPost(`/api/inspections/${inspection.id}/review`, { decision, reason, note });
+      const r = await apiPost(`/api/inspections/${inspection.id}/review`, { decision, reason: reject ? reason : '', note });
       haptic('success');
       onDone(r);
     } catch (err) {
@@ -45,28 +43,32 @@ function ReviewForm({ inspection, onDone, onCancel }) {
     }
   }
 
-  if (!decision) {
-    return (
-      <div className="decide-row">
-        <button type="button" className="btn btn-outline btn-danger" onClick={() => setDecision('reject')}>
-          Tolak
-        </button>
-        <button type="button" className="btn btn-ink" onClick={() => setDecision('approve')}>
-          <Icon name="check" size={18} strokeWidth={2.5} /> Setujui
-        </button>
-        {onCancel && (
-          <button type="button" className="btn btn-text decide-cancel" onClick={onCancel}>
-            Batal ubah
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  const reject = decision === 'reject';
   return (
-    <form className={`review-form review-form-${decision}`} onSubmit={submit} noValidate>
-      <p className="review-form-title">{reject ? 'Tolak inspeksi' : 'Setujui inspeksi'}</p>
+    <form className="review-form" onSubmit={submit} noValidate>
+      <div className="field">
+        <label className="field-label" htmlFor="review-decision">
+          Keputusan
+        </label>
+        <div className="select-wrap">
+          <select
+            id="review-decision"
+            className={`input select${decision ? '' : ' is-empty'}`}
+            value={decision}
+            disabled={busy}
+            aria-required="true"
+            onChange={(e) => {
+              setDecision(e.target.value);
+              setReasonError('');
+              setError('');
+            }}
+          >
+            <option value="">Pilih keputusan</option>
+            <option value="approve">Setujui</option>
+            <option value="reject">Tolak</option>
+          </select>
+          <Icon name="down" size={18} className="select-chev" />
+        </div>
+      </div>
       {reject && (
         <div className="field">
           <label className="field-label" htmlFor="reject-reason">
@@ -105,14 +107,14 @@ function ReviewForm({ inspection, onDone, onCancel }) {
           {error}
         </p>
       )}
-      <div className="decide-row">
-        <button type="button" className="btn btn-outline" onClick={() => { setDecision(null); setReasonError(''); setError(''); }} disabled={busy}>
-          Batal
+      <button type="submit" className={`btn btn-primary btn-block${busy ? ' is-busy' : ''}`} disabled={!decision || busy}>
+        {busy ? 'Menyimpan...' : 'Simpan keputusan'}
+      </button>
+      {onCancel && (
+        <button type="button" className="btn btn-text decide-cancel" onClick={onCancel} disabled={busy}>
+          Batal ubah
         </button>
-        <button type="submit" className={`btn ${reject ? 'btn-primary' : 'btn-ink'}`} disabled={busy}>
-          {busy ? 'Menyimpan...' : reject ? 'Tolak' : 'Setujui'}
-        </button>
-      </div>
+      )}
     </form>
   );
 }
@@ -156,6 +158,9 @@ export default function ReviewDetail({ me, id }) {
   const [lightbox, setLightbox] = useState(null);
   const [editing, setEditing] = useState(false);
   const [activeStage, setActiveStage] = useState(null);
+  // Stage chosen by a chip tap. It wins over scroll-spy while the jump animates, and afterwards only
+  // while the page sits at its end (where short last sections can never reach the top).
+  const pinnedRef = useRef(null);
   const canUpload = me.roles.includes('uploader');
 
   useEffect(() => {
@@ -178,10 +183,37 @@ export default function ReviewDetail({ me, id }) {
   useEffect(() => {
     if (!data) return undefined;
     const els = STAGE_ORDER.map((s) => document.getElementById(`stage-${s}`)).filter(Boolean);
+    const nav = document.querySelector('.stage-nav');
+    const root = document.documentElement;
+    const measure = () => nav && root.style.setProperty('--snav-h', `${Math.ceil(nav.getBoundingClientRect().height)}px`);
+    measure();
+    const ro = nav ? new ResizeObserver(measure) : null;
+    ro?.observe(nav);
+    const unpin = () => {
+      pinnedRef.current = null;
+    };
+    let settle = 0;
     const onScroll = () => {
       let cur = null;
-      const nav = document.querySelector('.stage-nav');
-      const line = (nav ? nav.getBoundingClientRect().bottom : 0) + 24;
+      if (nav) nav.classList.toggle('is-stuck', nav.getBoundingClientRect().top <= 0 && window.scrollY > 0);
+      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      const pin = pinnedRef.current;
+      if (pin && !pin.settled) {
+        clearTimeout(settle);
+        settle = setTimeout(() => {
+          if (pinnedRef.current === pin) pin.settled = true;
+        }, 150);
+        setActiveStage(pin.stage);
+        return;
+      }
+      if (pin && atEnd) {
+        setActiveStage(pin.stage);
+        return;
+      }
+      pinnedRef.current = null;
+      // A section counts as current once its top passes ~1/3 down the visible area under the chips.
+      const navBottom = nav ? nav.getBoundingClientRect().bottom : 0;
+      const line = navBottom + (window.innerHeight - navBottom) * 0.33;
       for (const el of els) if (el.getBoundingClientRect().top <= line) cur = el.id.slice(6);
       // At the very bottom the last short sections can never reach the line.
       if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
@@ -192,7 +224,16 @@ export default function ReviewDetail({ me, id }) {
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('touchstart', unpin, { passive: true });
+    window.addEventListener('wheel', unpin, { passive: true });
+    return () => {
+      clearTimeout(settle);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('touchstart', unpin);
+      window.removeEventListener('wheel', unpin);
+      ro?.disconnect();
+      root.style.removeProperty('--snav-h');
+    };
   }, [data]);
 
   if (!me.roles.includes('reviewer')) {
@@ -244,9 +285,10 @@ export default function ReviewDetail({ me, id }) {
   const jump = (s) => {
     const el = document.getElementById(`stage-${s}`);
     if (!el) return;
-    const navH = document.querySelector('.stage-nav')?.getBoundingClientRect().height || 64;
-    const top = el.getBoundingClientRect().top + window.scrollY - navH - 12;
-    window.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    pinnedRef.current = { stage: s, settled: false };
+    setActiveStage(s);
+    // scroll-margin-top on each section keeps it clear of the sticky chips.
+    el.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   };
 
   return (
