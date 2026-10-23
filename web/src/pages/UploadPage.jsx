@@ -33,19 +33,36 @@ const STATUS_TEXT = {
 };
 
 // Keeps the page bottom padding equal to the real height of the fixed action bar.
-function useBarHeight(ref) {
+function useBarHeight(el) {
   useLayoutEffect(() => {
-    const el = ref.current;
     if (!el) return undefined;
-    const set = () => document.documentElement.style.setProperty('--bar-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    const root = document.documentElement;
+    // Shadow on the bar only while there is still content hidden underneath it.
+    const edge = () => el.classList.toggle('has-more', window.innerHeight + window.scrollY < root.scrollHeight - 2);
+    let prev = 0;
+    const set = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      // If the bar grows (progress strip, failure warning) while the user sits at the end of the page,
+      // keep the last content in view instead of letting the bar slide over it.
+      const atEnd = prev && window.innerHeight + window.scrollY >= root.scrollHeight - 4;
+      root.style.setProperty('--bar-h', `${h}px`);
+      if (atEnd && h > prev) window.scrollBy(0, h - prev);
+      prev = h;
+      edge();
+    };
     set();
     const ro = new ResizeObserver(set);
     ro.observe(el);
+    ro.observe(document.body);
+    window.addEventListener('scroll', edge, { passive: true });
+    window.addEventListener('resize', set);
     return () => {
       ro.disconnect();
-      document.documentElement.style.removeProperty('--bar-h');
+      window.removeEventListener('scroll', edge);
+      window.removeEventListener('resize', set);
+      root.style.removeProperty('--bar-h');
     };
-  });
+  }, [el]);
 }
 
 function ThumbBadge({ status, progress }) {
@@ -172,12 +189,13 @@ export default function UploadPage({ me, search }) {
   const [formError, setFormError] = useState('');
   const [summary, setSummary] = useState(null);
   const [sheetKey, setSheetKey] = useState(null);
+  const [skipped, setSkipped] = useState(0);
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
-  const barRef = useRef(null);
+  const [barEl, setBarEl] = useState(null);
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  useBarHeight(barRef);
+  useBarHeight(barEl);
 
   useEffect(() => {
     if (paramError || !canUpload) return undefined;
@@ -199,7 +217,8 @@ export default function UploadPage({ me, search }) {
   const active = items.filter((i) => i.status !== 'invalid');
   const pendingCount = items.filter((i) => i.status !== 'invalid' && i.status !== 'done').length;
   const doneCount = items.filter((i) => i.status === 'done').length;
-  const slotsLeft = remainingServer - pendingCount - (submissionId ? 0 : doneCount);
+  // info.remaining is read once per session, so photos already saved in it still take slots.
+  const slotsLeft = remainingServer - pendingCount - doneCount;
   const locked = phase === 'uploading' || Boolean(submissionId);
   const plate = params.plate || info.plate;
   const vehicle = params.vehicle || info.vehicle;
@@ -328,11 +347,16 @@ export default function UploadPage({ me, search }) {
     }
   }
 
+  // Skipped photos leave the list, so every count on screen matches what the server holds.
   function dropFailed() {
-    setItems((list) => {
-      list.filter((i) => i.status === 'failed').forEach((i) => i.previewUrl && URL.revokeObjectURL(i.previewUrl));
-      return list.filter((i) => i.status !== 'failed');
-    });
+    const failed = itemsRef.current.filter((i) => i.status === 'failed');
+    failed.forEach((i) => i.previewUrl && URL.revokeObjectURL(i.previewUrl));
+    const kept = itemsRef.current.filter((i) => i.status !== 'failed');
+    itemsRef.current = kept;
+    setItems(kept);
+    setSkipped((n) => n + failed.length);
+    if (submissionId && kept.some((i) => i.status === 'done')) return finish(submissionId);
+    return undefined;
   }
 
   function startAnother() {
@@ -342,6 +366,7 @@ export default function UploadPage({ me, search }) {
     setResult('');
     setSubmissionId(null);
     setSummary(null);
+    setSkipped(0);
     setFormError('');
     setPhase('edit');
     window.scrollTo(0, 0);
@@ -381,16 +406,30 @@ export default function UploadPage({ me, search }) {
     return (
       <main className="page page-done">
         <AppHeader title="Foto terkirim" />
+        <div className="done-body">
         <section className="done" aria-live="polite">
           <div className="done-head">
             <span className="done-mark" aria-hidden="true">
               <Icon name="check" size={28} strokeWidth={2.75} />
             </span>
             <div>
-              <p className="done-count">{summary.photoCount} foto</p>
+              <p className="done-count">{summary.photoCount} foto tersimpan</p>
               <p className="muted">Menunggu review GA</p>
+              {skipped > 0 && <p className="done-skip">{skipped} foto yang gagal tidak ikut dikirim.</p>}
             </div>
           </div>
+          {items.some((i) => i.status === 'done' && i.previewUrl) && (
+            <ul className="done-thumbs" aria-label="Foto yang tersimpan">
+              {items
+                .filter((i) => i.status === 'done')
+                .map((it, idx) => (
+                  <li key={it.key}>
+                    {it.previewUrl && <img src={it.previewUrl} alt={`Foto ${idx + 1}${it.caption ? `: ${it.caption}` : ''}`} />}
+                    <span className="tcell-num" aria-hidden="true">{idx + 1}</span>
+                  </li>
+                ))}
+            </ul>
+          )}
           <dl className="kv">
             <div>
               <dt>Kendaraan</dt>
@@ -439,6 +478,7 @@ export default function UploadPage({ me, search }) {
               Lihat di halaman review
             </Link>
           )}
+        </div>
         </div>
       </main>
     );
@@ -528,6 +568,7 @@ export default function UploadPage({ me, search }) {
                 const st = it.status;
                 return (
                   <li key={it.key} className={`tcell tcell-${st}`}>
+                    <div className="tcell-media">
                     <button
                       type="button"
                       className="tcell-open"
@@ -547,6 +588,7 @@ export default function UploadPage({ me, search }) {
                     <span className="tcell-badge" aria-hidden="true">
                       <ThumbBadge status={st} progress={it.progress} />
                     </span>
+                    </div>
                     <span className={`tcell-cap${it.caption ? ' has-cap' : ''}`} aria-hidden="true">
                       {it.caption || (st === 'failed' || st === 'invalid' ? 'Gagal' : '+ Keterangan')}
                     </span>
@@ -554,14 +596,18 @@ export default function UploadPage({ me, search }) {
                 );
               })}
             </ul>
-            <div className="pick-row">
-              <button type="button" className="btn btn-outline" onClick={() => cameraRef.current?.click()} disabled={!canPick}>
-                <Icon name="camera" /> Kamera
-              </button>
-              <button type="button" className="btn btn-outline" onClick={() => galleryRef.current?.click()} disabled={!canPick}>
-                <Icon name="image" /> Galeri
-              </button>
-            </div>
+            {slotsLeft <= 0 ? (
+              <p className="limit-note">Batas {MAX_PHOTOS} foto tercapai.</p>
+            ) : (
+              <div className="pick-row">
+                <button type="button" className="btn btn-outline" onClick={() => cameraRef.current?.click()} disabled={!canPick}>
+                  <Icon name="camera" /> Kamera
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => galleryRef.current?.click()} disabled={!canPick}>
+                  <Icon name="image" /> Galeri
+                </button>
+              </div>
+            )}
           </>
         )}
       </section>
@@ -599,7 +645,7 @@ export default function UploadPage({ me, search }) {
         </Notice>
       )}
 
-      <div className="action-bar" ref={barRef}>
+      <div className="action-bar" ref={setBarEl}>
         <div className="action-inner">
           {phase === 'uploading' && (
             <div className="total-progress" aria-live="polite">
@@ -622,9 +668,11 @@ export default function UploadPage({ me, search }) {
               <button type="button" className="btn btn-primary" onClick={sendAll}>
                 <Icon name="retry" size={18} /> Kirim ulang {failedCount} foto
               </button>
-              <button type="button" className="btn btn-outline" onClick={dropFailed}>
-                Lanjut tanpa foto gagal
-              </button>
+              {doneCount > 0 && (
+                <button type="button" className="btn btn-outline" onClick={dropFailed}>
+                  Lanjut tanpa {failedCount} foto gagal
+                </button>
+              )}
             </div>
           ) : (
             <button type="button" className="btn btn-primary btn-block" onClick={sendAll} disabled={phase === 'uploading' || compressing || (sendable === 0 && phase !== 'partial')}>
