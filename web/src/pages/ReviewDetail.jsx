@@ -85,7 +85,7 @@ function ReviewForm({ inspection, onDone, onCancel }) {
             }}
             aria-invalid={Boolean(reasonError)}
             aria-describedby={reasonError ? 'reject-reason-err' : undefined}
-            placeholder="Contoh: foto odometer buram, ulangi"
+            placeholder="Contoh: foto odometer buram, ulangi fotonya"
           />
           {reasonError && (
             <p className="field-error" id="reject-reason-err" role="alert">
@@ -217,11 +217,11 @@ export default function ReviewDetail({ me, id }) {
       <StateScreen
         icon={nf ? 'missing' : 'alert'}
         tone={nf ? 'neutral' : 'error'}
-        header={<AppHeader title="Detail inspeksi" back={BACK} />}
-        title={nf ? 'Tidak ditemukan' : 'Gagal memuat inspeksi'}
+        header={<AppHeader title="Review inspeksi" />}
+        title={nf ? 'Inspeksi tidak ditemukan' : 'Gagal memuat inspeksi'}
         action={
           nf ? (
-            <Link className="btn btn-outline" to="/review">Kembali ke daftar</Link>
+            <Link className="btn btn-ink" to="/review">Kembali ke daftar</Link>
           ) : (
             <button type="button" className="btn btn-outline" onClick={() => { setState({ loading: true }); setReload((n) => n + 1); }}>
               <Icon name="retry" size={18} /> Coba lagi

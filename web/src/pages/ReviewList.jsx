@@ -123,15 +123,21 @@ export default function ReviewList({ me, search }) {
           <p className="empty-title">{term ? 'Tidak ada hasil' : status === 'pending' ? 'Tidak ada yang menunggu review' : `Belum ada inspeksi ${filterLabel.toLowerCase()}`}</p>
           <p className="muted">
             {term
-              ? `Tidak ada plat atau booking yang cocok dengan "${term}" di filter ${filterLabel}.`
+              ? `Tidak ada plat atau booking yang cocok dengan "${term}"${status ? ` di filter ${filterLabel}` : ''}.`
               : status === 'pending'
                 ? 'Inspeksi baru muncul di sini setelah admin GA mengirim foto lewat GA Bot.'
                 : 'Coba filter lain atau cari berdasarkan plat.'}
           </p>
-          {(term || status !== '') && (
-            <button type="button" className="btn btn-outline" onClick={() => { setQ(''); setStatus(''); }}>
-              Lihat semua inspeksi
+          {term ? (
+            <button type="button" className="btn btn-outline" onClick={() => { setQ(''); setTerm(''); }}>
+              Hapus pencarian
             </button>
+          ) : (
+            status !== '' && (
+              <button type="button" className="btn btn-outline" onClick={() => setStatus('')}>
+                Lihat semua inspeksi
+              </button>
+            )
           )}
         </div>
       )}
