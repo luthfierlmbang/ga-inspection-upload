@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from './router.jsx';
 import { apiGet } from './lib/api.js';
 import { insideTelegram } from './lib/telegram.js';
-import { AppHeader, Loading, Notice } from './components/Layout.jsx';
+import { AppHeader, Loading, StateScreen, roleLabel } from './components/Layout.jsx';
 import UploadPage from './pages/UploadPage.jsx';
 import ReviewList from './pages/ReviewList.jsx';
 import ReviewDetail from './pages/ReviewDetail.jsx';
@@ -22,24 +22,30 @@ function useMe() {
 }
 
 function AuthProblem({ error }) {
-  let title = 'Tidak bisa membuka halaman';
-  let body = error.message;
   if (error.status === 401) {
-    title = 'Buka dari GA Bot Telegram';
-    body = insideTelegram()
-      ? 'Sesi Telegram tidak valid atau sudah lebih dari 24 jam. Tutup halaman ini lalu tekan lagi tombol dari GA Bot.'
-      : 'Halaman ini hanya bisa dibuka lewat tombol di GA Bot Telegram.';
-  } else if (error.status === 403) {
-    title = 'Akses ditolak';
-    body = 'Akun Telegram ini belum terdaftar sebagai admin GA. Hubungi tim GA untuk didaftarkan.';
+    return (
+      <StateScreen icon="phone" title="Buka lewat GA Bot">
+        <p>
+          {insideTelegram()
+            ? 'Sesi Telegram tidak valid atau sudah lebih dari 24 jam.'
+            : 'Halaman ini hanya bisa dibuka dari tombol di GA Bot Telegram.'}
+        </p>
+        <p className="muted">Tutup halaman ini, lalu tekan lagi tombol inspeksi pada pesan booking di GA Bot.</p>
+      </StateScreen>
+    );
+  }
+  if (error.status === 403) {
+    return (
+      <StateScreen icon="lock" title="Akses ditolak">
+        <p>Akun Telegram ini belum terdaftar sebagai admin GA.</p>
+        <p className="muted">Hubungi tim GA dan kirim ID Telegram Anda untuk didaftarkan.</p>
+      </StateScreen>
+    );
   }
   return (
-    <main className="page">
-      <AppHeader title="Inspection Kendaraan" />
-      <Notice kind="error" title={title}>
-        <p>{body}</p>
-      </Notice>
-    </main>
+    <StateScreen icon="alert" tone="error" title="Tidak bisa membuka halaman" action={<button type="button" className="btn btn-outline" onClick={() => window.location.reload()}>Muat ulang</button>}>
+      <p>{error.message}</p>
+    </StateScreen>
   );
 }
 
@@ -50,7 +56,7 @@ export default function App() {
   if (loading) {
     return (
       <main className="page">
-        <AppHeader title="Inspection Kendaraan" />
+        <AppHeader title="Inspeksi kendaraan" />
         <Loading label="Memeriksa akses" />
       </main>
     );
@@ -62,20 +68,26 @@ export default function App() {
   if (detail) return <ReviewDetail me={me} id={detail[1]} />;
   if (path === '/review' || path === '/review/') return <ReviewList me={me} search={search} />;
 
+  if (path !== '/' && path !== '') {
+    return (
+      <StateScreen icon="missing" title="Tidak ditemukan" action={me.roles.includes('reviewer') && <a className="btn btn-outline" href="/review">Buka daftar review</a>}>
+        <p>Halaman ini tidak ada.</p>
+        <p className="muted">Buka lagi dari tombol di GA Bot.</p>
+      </StateScreen>
+    );
+  }
+
   return (
     <main className="page">
-      <AppHeader title="Inspection Kendaraan" sub={me.name} />
-      <Notice kind="info" title="Pilih menu">
-        <p>Halaman ini dibuka dari tombol GA Bot. Pilih tujuan:</p>
-      </Notice>
+      <AppHeader title="Inspeksi kendaraan" sub={roleLabel(me.roles)} />
       <div className="stack">
         {me.roles.includes('reviewer') && (
-          <a className="btn btn-primary" href="/review">
-            Daftar inspection untuk direview
+          <a className="btn btn-primary btn-block" href="/review">
+            Buka daftar review
           </a>
         )}
         {me.roles.includes('uploader') && (
-          <p className="muted">Untuk upload foto, buka tombol upload pada pesan booking di GA Bot.</p>
+          <p className="muted">Untuk upload foto, tekan tombol upload pada pesan booking di GA Bot.</p>
         )}
       </div>
     </main>

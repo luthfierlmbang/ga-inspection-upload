@@ -1,4 +1,4 @@
-// Small stroke icons drawn for this app (camera, image, close, chevrons, zoom, retry, check).
+// Small stroke icons drawn for this app. Square caps match the document-style rules.
 const paths = {
   camera: 'M4 8h3l2-3h6l2 3h3v11H4z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   image: 'M4 5h16v14H4z M4 16l5-5 4 4 2-2 5 5 M15.5 9.5a1 1 0 1 0 0-.01',
@@ -11,6 +11,12 @@ const paths = {
   check: 'M5 12.5l4.5 4.5L19 7',
   search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5L20 20',
   plus: 'M12 5v14 M5 12h14',
+  alert: 'M12 6v8 M12 17.5v1',
+  lock: 'M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+  missing: 'M5 4h10l4 4v12H5z M14 4v5h5 M9.5 12.5l5 5 M14.5 12.5l-5 5',
+  edit: 'M4 20h4L19 9l-4-4L4 16z M13 7l4 4',
+  inbox: 'M4 13l3-8h10l3 8v6H4z M4 13h5l1 2h4l1-2h5',
+  phone: 'M7 3h10v18H7z M11 18h2',
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 2, className }) {

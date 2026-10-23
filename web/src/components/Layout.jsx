@@ -1,18 +1,34 @@
-export function AppHeader({ title, sub, right }) {
+import Icon from './Icon.jsx';
+import { Link } from '../router.jsx';
+
+export function AppHeader({ title, sub, back }) {
   return (
     <header className="app-header">
       <div className="brand-row">
         <img src="/logo.png" alt="INTEK" className="brand-logo" width="113" height="23" />
         <span className="brand-unit">General Affairs</span>
       </div>
-      <div className="title-row">
-        <div className="title-block">
-          <h1>{title}</h1>
-          {sub && <p className="title-sub">{sub}</p>}
-        </div>
-        {right}
+      {back && (
+        <Link to={back.to} className="back-link">
+          <Icon name="left" size={18} strokeWidth={2.25} /> {back.label}
+        </Link>
+      )}
+      <div className={`title-block${back ? ' has-back' : ''}`}>
+        <h1>{title}</h1>
+        {sub && <p className="title-sub">{sub}</p>}
       </div>
     </header>
+  );
+}
+
+// Numbered step head in the INTEK GA guide style: red number, bold title, quiet aside.
+export function StepHead({ num, title, aside, id }) {
+  return (
+    <div className="step-head">
+      <span className="step-num" aria-hidden="true">{num}</span>
+      <h2 className="step-title" id={id}>{title}</h2>
+      {aside && <span className="step-aside">{aside}</span>}
+    </div>
   );
 }
 
@@ -25,9 +41,10 @@ export function SectionLabel({ children, aside }) {
   );
 }
 
-export function StatusTag({ status }) {
-  const labels = { pending: 'Menunggu review', approved: 'Disetujui', rejected: 'Ditolak' };
-  return <span className={`status-tag status-${status}`}>{labels[status] || status}</span>;
+const STATUS_LABELS = { pending: 'Menunggu review', approved: 'Disetujui', rejected: 'Ditolak' };
+export function StatusTag({ status, short }) {
+  const label = short && status === 'pending' ? 'Menunggu' : STATUS_LABELS[status] || status;
+  return <span className={`status-tag status-${status}`}>{label}</span>;
 }
 
 export function Notice({ kind = 'info', title, children, action }) {
@@ -37,6 +54,23 @@ export function Notice({ kind = 'info', title, children, action }) {
       {children && <div className="notice-body">{children}</div>}
       {action}
     </div>
+  );
+}
+
+// Full-height state (error, access, not found): icon, meaningful title, one sentence, next step.
+export function StateScreen({ icon = 'alert', tone = 'neutral', title, children, action, header }) {
+  return (
+    <main className="page page-state">
+      {header || <AppHeader title="Inspeksi kendaraan" />}
+      <section className="state" role={tone === 'error' ? 'alert' : 'status'}>
+        <span className={`state-icon state-${tone}`} aria-hidden="true">
+          <Icon name={icon} size={28} strokeWidth={2.25} />
+        </span>
+        <h2 className="state-title">{title}</h2>
+        {children && <div className="state-body">{children}</div>}
+        {action && <div className="state-action">{action}</div>}
+      </section>
+    </main>
   );
 }
 
@@ -56,4 +90,13 @@ export function ProgressBar({ value, label }) {
       <span style={{ width: `${pct}%` }} />
     </div>
   );
+}
+
+export function roleLabel(roles = []) {
+  const up = roles.includes('uploader');
+  const rv = roles.includes('reviewer');
+  if (up && rv) return 'Admin GA, upload dan review';
+  if (rv) return 'Reviewer GA';
+  if (up) return 'Pengunggah foto GA';
+  return '';
 }
