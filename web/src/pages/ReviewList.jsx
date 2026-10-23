@@ -84,6 +84,7 @@ export default function ReviewList({ me, search }) {
   });
 
   const counts = state.counts;
+  const nothingAtAll = counts && counts.all === 0 && !term;
   const filterLabel = FILTERS.find(([v]) => v === status)?.[1] || 'Semua';
 
   return (
@@ -120,11 +121,13 @@ export default function ReviewList({ me, search }) {
           <span className="empty-icon" aria-hidden="true">
             <Icon name={term ? 'search' : 'inbox'} size={24} />
           </span>
-          <p className="empty-title">{term ? 'Tidak ada hasil' : status === 'pending' ? 'Tidak ada yang menunggu review' : `Belum ada inspeksi ${filterLabel.toLowerCase()}`}</p>
+          <p className="empty-title">
+            {term ? 'Tidak ada hasil' : nothingAtAll ? 'Belum ada inspeksi' : status === 'pending' ? 'Tidak ada yang menunggu review' : `Belum ada inspeksi ${filterLabel.toLowerCase()}`}
+          </p>
           <p className="muted">
             {term
               ? `Tidak ada plat atau booking yang cocok dengan "${term}"${status ? ` di filter ${filterLabel}` : ''}.`
-              : status === 'pending'
+              : nothingAtAll || status === 'pending'
                 ? 'Inspeksi baru muncul di sini setelah admin GA mengirim foto lewat GA Bot.'
                 : 'Coba filter lain atau cari berdasarkan plat.'}
           </p>
@@ -133,7 +136,7 @@ export default function ReviewList({ me, search }) {
               Hapus pencarian
             </button>
           ) : (
-            status !== '' && (
+            status !== '' && !nothingAtAll && (
               <button type="button" className="btn btn-outline" onClick={() => setStatus('')}>
                 Lihat semua inspeksi
               </button>

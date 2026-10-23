@@ -346,7 +346,7 @@ export default function ReviewDetail({ me, id }) {
             <div className="review-result-head">
               <StatusTag status={data.status} />
               <span className="session-by">
-                {data.review.byName} · {formatDate(data.review.at)}
+                oleh {data.review.byName} · {formatDate(data.review.at)}
               </span>
             </div>
             {data.review.reason && (

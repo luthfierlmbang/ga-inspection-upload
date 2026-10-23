@@ -476,6 +476,7 @@ textarea.input { resize: none; }
 .review-result p { overflow-wrap: anywhere; }
 .review-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .review-result-head .session-by { border: 0; padding: 0; }
+.review-result .btn-text { color: var(--ink); }
 .rr-item { display: flex; flex-direction: column; gap: 4px; }
 .review-approved { border-color: var(--green-line); }
 .review-rejected { border-color: var(--red-line); }
